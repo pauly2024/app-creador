@@ -26,6 +26,7 @@ import ReactMarkdown from 'react-markdown';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { GoogleGenAI } from "@google/genai";
+import { auth, db } from './firebase';
 import { CategoryType, SubPackage, Project, ChatMessage } from './types';
 import { PACKAGES_DATA } from './constants';
 
@@ -42,6 +43,8 @@ const CATEGORIES: { type: CategoryType; icon: any; description: string }[] = [
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [clientName, setClientName] = useState('');
   const [projectName, setProjectName] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
@@ -53,18 +56,28 @@ export default function App() {
   const [currentInput, setCurrentInput] = useState('');
   const [result, setResult] = useState<any>(null);
   const [history, setHistory] = useState<Project[]>([]);
-  const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
+  const [activeTab, setActiveTab] = useState<'form' | 'history' | 'ai'>('form');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiType, setAiType] = useState<'chat' | 'image' | 'video'>('chat');
+  const [aiComplexity, setAiComplexity] = useState<'fast' | 'general' | 'high'>('general');
+  const [aiQuality, setAiQuality] = useState<'standard' | 'high'>('standard');
+  const [aiAspectRatio, setAiAspectRatio] = useState<'16:9' | '9:16'>('16:9');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoggedIn(true);
+    if (username === 'admin' && password === 'admin') {
+      setIsLoggedIn(true);
+    } else {
+      alert('Credenciales incorrectas');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'referencia' | 'paleta') => {
@@ -134,8 +147,8 @@ export default function App() {
         }
         
         if (data.success) {
-          const newProject: Project = {
-            id: Date.now().toString(),
+          const newProject: Omit<Project, 'id'> = {
+            userId: user.uid,
             clientName,
             projectName,
             extraInfo,
@@ -146,7 +159,7 @@ export default function App() {
             createdAt: Date.now(),
             result: data.data
           };
-          setHistory(prev => [newProject, ...prev]);
+          await addDoc(collection(db, 'projects'), newProject);
           setResult(data.data); // Store the full result object
         } else {
           throw new Error(data.error);
@@ -222,6 +235,7 @@ export default function App() {
         
         const newProject: Project = {
           id: Date.now().toString(),
+          userId: user.uid,
           clientName,
           projectName,
           extraInfo,
@@ -269,7 +283,8 @@ export default function App() {
               <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Usuario</label>
               <input 
                 type="text" 
-                defaultValue="admin"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 focus:border-brand-cyan outline-none transition-colors"
               />
             </div>
@@ -277,7 +292,8 @@ export default function App() {
               <label className="block text-xs font-bold text-brand-muted uppercase tracking-wider mb-2">Contraseña</label>
               <input 
                 type="password" 
-                defaultValue="admin"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-brand-bg border border-brand-border rounded-xl px-4 py-3 focus:border-brand-cyan outline-none transition-colors"
               />
             </div>
@@ -309,13 +325,13 @@ export default function App() {
               Nuevo Proyecto
             </button>
             <button 
-              onClick={() => setActiveTab('history')}
+              onClick={() => setActiveTab('ai')}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                activeTab === 'history' ? "bg-brand-border text-brand-cyan" : "text-brand-muted hover:text-white"
+                activeTab === 'ai' ? "bg-brand-border text-brand-cyan" : "text-brand-muted hover:text-white"
               )}
             >
-              Historial
+              IA Generativa
             </button>
           </nav>
         </div>

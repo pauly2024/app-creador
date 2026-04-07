@@ -216,109 +216,55 @@ async function startServer() {
     }
   });
 
-  app.post("/api/generate-social", async (req, res) => {
+  app.post("/api/ai/image", async (req, res) => {
     try {
-      const { clientName, subPackage, extraInfo, images } = req.body;
-      const { features, name } = subPackage;
-
-      // Convert images to Gemini parts if they exist
-      const imageParts = (images || []).map((img: string) => {
-        const base64Data = img.split(',')[1] || img;
-        return {
-          inlineData: {
-            data: base64Data,
-            mimeType: "image/jpeg"
-          }
-        };
-      });
-
-      const prompt = `
-        Eres el Social Media Manager de DigiMarket RD.
-        Crea una tanda de posts para las redes sociales del cliente: "${clientName}".
-        Información adicional: "${extraInfo}".
-        
-        PAQUETE SELECCIONADO: ${name}
-        CARACTERÍSTICAS OBLIGATORIAS A ENTREGAR:
-        ${features.map((f: string) => `- ${f}`).join('\n')}
-        
-        IMPORTANTE - GUÍA DE ESTILO: 
-        Se ha proporcionado una imagen de referencia. 
-        1. Analiza profundamente el estilo visual de esta imagen (colores, iluminación, tipo de fotografía, ambiente).
-        2. El POST #1 DEBE usar obligatoriamente la imagen de referencia proporcionada (referenceImageIndex: 0).
-        3. Para los POSTS siguientes, debes generar prompts en INGLÉS que describan escenas NUEVAS pero que mantengan EXACTAMENTE el mismo estilo visual, paleta de colores y "vibe" de la imagen de referencia. Queremos que parezcan de la misma sesión de fotos.
-        
-        DEBES GENERAR UNA RESPUESTA JSON CON:
-        1. "strategy": Breve resumen de la estrategia de consistencia visual.
-        2. "posts": Array de objetos {copy, hashtags, imagePrompt, referenceImageIndex}.
-        3. "code": Objeto con los archivos necesarios (ej. {"post1.md": "...", "post2.md": "..."}) que implementen TODAS las características obligatorias listadas arriba.
-      `;
-
+      const { prompt, quality } = req.body;
+      const model = quality === 'high' ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview';
+      
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              ...imageParts
-            ]
-          }
-        ],
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      
+      res.json({ success: true, data: response.text });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/ai/video", async (req, res) => {
+    try {
+      const { prompt, aspectRatio } = req.body;
+      const response = await ai.models.generateContent({
+        model: 'veo-3.1-fast-generate-preview',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              strategy: { type: Type.STRING, description: "Breve resumen de la estrategia de consistencia visual" },
-              posts: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    copy: { type: Type.STRING },
-                    hashtags: { type: Type.STRING },
-                    imagePrompt: { type: Type.STRING, description: "Prompt en inglés que IMITA el estilo de la referencia" },
-                    referenceImageIndex: { type: Type.NUMBER, description: "0 para usar la foto subida, null para generar una nueva" }
-                  },
-                  required: ["copy", "hashtags", "imagePrompt"]
-                }
-              },
-              code: {
-                type: Type.OBJECT,
-                additionalProperties: { type: Type.STRING },
-                description: "Mapa de archivos: nombre del archivo -> contenido del código"
-              }
-            },
-            required: ["strategy", "posts", "code"]
+          generationConfig: {
+            aspectRatio: aspectRatio || '16:9'
           }
         }
       });
-
-      const socialData = JSON.parse(response.text || "{}");
-
-      // Generate/Map Images
-      const generatedPosts = [];
-      for (let i = 0; i < socialData.posts.length; i++) {
-        const post = socialData.posts[i];
-        let imageUrl = "";
-
-        // Si la IA dice que usemos la referencia (índice 0) y existe
-        if (post.referenceImageIndex === 0 && images && images[0]) {
-          imageUrl = images[0];
-        } else {
-          // Si no, generamos una nueva basada en el prompt de estilo
-          const encodedPrompt = encodeURIComponent(post.imagePrompt + " --v 6.0 --style raw --ar 1:1");
-          const seed = Math.floor(Math.random() * 100000);
-          // Usamos un motor de renderizado más potente en el prompt
-          imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1080&height=1080&nologo=true&model=flux`;
-        }
-        
-        generatedPosts.push({ ...post, imageUrl });
-      }
-
-      res.json({ success: true, data: { ...socialData, posts: generatedPosts } });
+      
+      res.json({ success: true, data: response.text });
     } catch (error: any) {
-      console.error("Error generating social:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { prompt, complexity } = req.body;
+      let model = 'gemini-3-flash-preview';
+      if (complexity === 'high') model = 'gemini-3.1-pro-preview';
+      if (complexity === 'fast') model = 'gemini-3.1-flash-lite-preview';
+      
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      
+      res.json({ success: true, data: response.text });
+    } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
   });

@@ -13,6 +13,7 @@ export interface SubPackage {
 
 export interface Project {
   id: string;
+  userId: string;
   clientName: string;
   projectName: string;
   extraInfo: string;
