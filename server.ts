@@ -237,12 +237,7 @@ async function startServer() {
       const { prompt, aspectRatio } = req.body;
       const response = await ai.models.generateContent({
         model: 'veo-3.1-fast-generate-preview',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          generationConfig: {
-            aspectRatio: aspectRatio || '16:9'
-          }
-        }
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
       
       res.json({ success: true, data: response.text });

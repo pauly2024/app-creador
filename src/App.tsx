@@ -147,8 +147,9 @@ export default function App() {
         }
         
         if (data.success) {
-          const newProject: Omit<Project, 'id'> = {
-            userId: user.uid,
+          const newProject: Project = {
+            id: Date.now().toString(),
+            userId: 'admin',
             clientName,
             projectName,
             extraInfo,
@@ -159,7 +160,7 @@ export default function App() {
             createdAt: Date.now(),
             result: data.data
           };
-          await addDoc(collection(db, 'projects'), newProject);
+          setHistory(prev => [newProject, ...prev]);
           setResult(data.data); // Store the full result object
         } else {
           throw new Error(data.error);
@@ -235,7 +236,7 @@ export default function App() {
         
         const newProject: Project = {
           id: Date.now().toString(),
-          userId: user.uid,
+          userId: 'admin',
           clientName,
           projectName,
           extraInfo,
