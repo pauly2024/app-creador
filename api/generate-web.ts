@@ -7,10 +7,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
     const { clientName, subPackageId, extraInfo, images } = req.body;
 
+    // Convert images to Gemini parts if they exist
+    const imageParts = (images || []).map((img: string) => {
+      const base64Data = img.split(',')[1] || img;
+      return {
+        inlineData: {
+          data: base64Data,
+          mimeType: "image/jpeg"
+        }
+      };
+    });
+
     const prompt = `
       Eres el Director de Desarrollo Web de DigiMarket RD.
       Crea la estructura y el copy para la web del cliente: "${clientName}".
       Información adicional: "${extraInfo}".
+      
+      IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
+      Analiza estas imágenes para entender la marca, el estilo y el contenido. 
+      Úsalas para proponer un diseño coherente.
       
       Debes generar:
       1. Un Sitemap (lista de páginas sugeridas).
@@ -20,7 +35,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            ...imageParts
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {

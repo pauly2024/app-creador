@@ -10,6 +10,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
     const { clientName, subPackageId, extraInfo, images } = req.body;
 
+    // Convert images to Gemini parts if they exist
+    const imageParts = (images || []).map((img: string) => {
+      const base64Data = img.split(',')[1] || img;
+      return {
+        inlineData: {
+          data: base64Data,
+          mimeType: "image/jpeg"
+        }
+      };
+    });
+
     // Determine number of logo proposals based on package
     let numLogos = 3;
     if (subPackageId === 'branding-2') numLogos = 4;
@@ -22,6 +33,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Crea la identidad visual para el cliente: "${clientName}".
       Información adicional: "${extraInfo}".
       
+      IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
+      Analiza estas imágenes para entender el estilo visual preferido del cliente.
+      
       Debes generar:
       1. Un manual de marca en formato Markdown (Misión, Visión, Tono de voz, Reglas de uso).
       2. Una paleta de colores (3 a 5 colores) con sus códigos HEX.
@@ -31,7 +45,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            ...imageParts
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {

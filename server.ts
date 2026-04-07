@@ -25,6 +25,17 @@ async function startServer() {
     try {
       const { clientName, subPackageId, extraInfo, images } = req.body;
 
+      // Convert images to Gemini parts if they exist
+      const imageParts = (images || []).map((img: string) => {
+        const base64Data = img.split(',')[1] || img;
+        return {
+          inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg"
+          }
+        };
+      });
+
       // Determine number of logo proposals based on package
       let numLogos = 3;
       if (subPackageId === 'branding-2') numLogos = 4;
@@ -37,6 +48,9 @@ async function startServer() {
         Crea la identidad visual para el cliente: "${clientName}".
         Información adicional: "${extraInfo}".
         
+        IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
+        Analiza estas imágenes para entender el estilo visual preferido del cliente.
+        
         Debes generar:
         1. Un manual de marca en formato Markdown (Misión, Visión, Tono de voz, Reglas de uso).
         2. Una paleta de colores (3 a 5 colores) con sus códigos HEX.
@@ -46,7 +60,15 @@ async function startServer() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              ...imageParts
+            ]
+          }
+        ],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -150,10 +172,25 @@ async function startServer() {
     try {
       const { clientName, subPackageId, extraInfo, images } = req.body;
 
+      // Convert images to Gemini parts if they exist
+      const imageParts = (images || []).map((img: string) => {
+        const base64Data = img.split(',')[1] || img;
+        return {
+          inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg"
+          }
+        };
+      });
+
       const prompt = `
         Eres el Director de Desarrollo Web de DigiMarket RD.
         Crea la estructura y el copy para la web del cliente: "${clientName}".
         Información adicional: "${extraInfo}".
+        
+        IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
+        Analiza estas imágenes para entender la marca, el estilo y el contenido. 
+        Úsalas para proponer un diseño coherente.
         
         Debes generar:
         1. Un Sitemap (lista de páginas sugeridas).
@@ -163,7 +200,15 @@ async function startServer() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              ...imageParts
+            ]
+          }
+        ],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -204,26 +249,52 @@ async function startServer() {
     try {
       const { clientName, subPackageId, extraInfo, images } = req.body;
 
+      // Convert images to Gemini parts if they exist
+      const imageParts = (images || []).map((img: string) => {
+        const base64Data = img.split(',')[1] || img;
+        return {
+          inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg"
+          }
+        };
+      });
+
       const prompt = `
         Eres el Social Media Manager de DigiMarket RD.
         Crea una tanda de 4 posts para las redes sociales del cliente: "${clientName}".
         Información adicional: "${extraInfo}".
         
+        IMPORTANTE - GUÍA DE ESTILO: 
+        Se ha proporcionado una imagen de referencia. 
+        1. Analiza profundamente el estilo visual de esta imagen (colores, iluminación, tipo de fotografía, ambiente).
+        2. El POST #1 DEBE usar obligatoriamente la imagen de referencia proporcionada (referenceImageIndex: 0).
+        3. Para los POSTS #2, #3 y #4, debes generar prompts en INGLÉS que describan escenas NUEVAS pero que mantengan EXACTAMENTE el mismo estilo visual, paleta de colores y "vibe" de la imagen de referencia. Queremos que parezcan de la misma sesión de fotos.
+        
         Para cada post debes generar:
         1. El texto (copy) persuasivo con emojis.
         2. Los hashtags recomendados.
-        3. Un prompt detallado en INGLÉS para generar la imagen del post en una IA (ej. "professional photography of a coffee cup on a wooden table, cinematic lighting").
+        3. Un prompt detallado en INGLÉS para generar la imagen (solo para los posts que no usan la referencia).
+        4. El índice de la imagen de referencia a usar (0 para el primer post, null para los demás).
       `;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              ...imageParts
+            ]
+          }
+        ],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              strategy: { type: Type.STRING, description: "Breve resumen de la estrategia" },
+              strategy: { type: Type.STRING, description: "Breve resumen de la estrategia de consistencia visual" },
               posts: {
                 type: Type.ARRAY,
                 items: {
@@ -231,7 +302,8 @@ async function startServer() {
                   properties: {
                     copy: { type: Type.STRING },
                     hashtags: { type: Type.STRING },
-                    imagePrompt: { type: Type.STRING }
+                    imagePrompt: { type: Type.STRING, description: "Prompt en inglés que IMITA el estilo de la referencia" },
+                    referenceImageIndex: { type: Type.NUMBER, description: "0 para usar la foto subida, null para generar una nueva" }
                   },
                   required: ["copy", "hashtags", "imagePrompt"]
                 }
@@ -244,13 +316,23 @@ async function startServer() {
 
       const socialData = JSON.parse(response.text || "{}");
 
-      // Generate Images
+      // Generate/Map Images
       const generatedPosts = [];
       for (let i = 0; i < socialData.posts.length; i++) {
         const post = socialData.posts[i];
-        const encodedPrompt = encodeURIComponent(post.imagePrompt + " high quality photography, social media post, professional");
-        const seed = Math.floor(Math.random() * 100000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1080&height=1080&nologo=true`;
+        let imageUrl = "";
+
+        // Si la IA dice que usemos la referencia (índice 0) y existe
+        if (post.referenceImageIndex === 0 && images && images[0]) {
+          imageUrl = images[0];
+        } else {
+          // Si no, generamos una nueva basada en el prompt de estilo
+          const encodedPrompt = encodeURIComponent(post.imagePrompt + " --v 6.0 --style raw --ar 1:1");
+          const seed = Math.floor(Math.random() * 100000);
+          // Usamos un motor de renderizado más potente en el prompt
+          imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1080&height=1080&nologo=true&model=flux`;
+        }
+        
         generatedPosts.push({ ...post, imageUrl });
       }
 
