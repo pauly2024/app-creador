@@ -18,7 +18,8 @@ import {
   DollarSign,
   Clock,
   ShieldCheck,
-  CreditCard
+  CreditCard,
+  ImagePlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -46,11 +47,11 @@ export default function App() {
   const [extraInfo, setExtraInfo] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType | null>(null);
   const [selectedSubPackage, setSelectedSubPackage] = useState<SubPackage | null>(null);
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<{url: string, type: 'logo' | 'referencia' | 'paleta'}[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentInput, setCurrentInput] = useState('');
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState<any>(null);
   const [history, setHistory] = useState<Project[]>([]);
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
 
@@ -66,13 +67,13 @@ export default function App() {
     setIsLoggedIn(true);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'referencia' | 'paleta') => {
     const files = e.target.files;
     if (files) {
       Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          setImages(prev => [...prev, reader.result as string]);
+          setImages(prev => [...prev, { url: reader.result as string, type }]);
         };
         reader.readAsDataURL(file);
       });
@@ -104,89 +105,123 @@ export default function App() {
   };
 
   const generateFinalResult = async (userInstructions: string) => {
-    if (!process.env.GEMINI_API_KEY) {
-      console.error("GEMINI_API_KEY is not defined");
-      setResult("Error: La clave de API de Gemini no está configurada. Por favor, verifica la configuración del entorno.");
-      setIsProcessing(false);
-      return;
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const model = "gemini-3-flash-preview";
-
-    const prompt = `Actúa como un Agente Maestro de Marketing y Tecnología en DigiMarket RD (República Dominicana). 
-    Tu tarea es generar un plan de ejecución y propuesta técnica IRREFUTABLE para un cliente.
-    
-    DATOS DEL CLIENTE:
-    - Cliente: ${clientName}
-    - Proyecto: ${projectName}
-    - Categoría: ${selectedCategory}
-    
-    DETALLES DEL PAQUETE SELECCIONADO:
-    - Nombre: ${selectedSubPackage?.name}
-    - Precio: ${selectedSubPackage?.price}
-    - Tiempo de Entrega: ${selectedSubPackage?.deliveryTime}
-    - Revisiones: ${selectedSubPackage?.revisions}
-    - Condiciones de Pago: ${selectedSubPackage?.paymentTerms}
-    - Características Incluidas: ${selectedSubPackage?.features.join(', ')}
-    
-    CONTEXTO ADICIONAL:
-    - Info Extra: ${extraInfo}
-    - Instrucciones del Chat: ${userInstructions}
-    
-    ESTRUCTURA DEL DOCUMENTO FINAL (Markdown):
-    1. 📋 RESUMEN DE LA PROPUESTA (Enfocado en el valor para el cliente)
-    2. 🎯 OBJETIVOS DEL PROYECTO (Específicos y medibles)
-    3. 🛠️ ALCANCE TÉCNICO Y CREATIVO (Detallar cada punto del paquete ${selectedSubPackage?.name})
-    4. 📅 CRONOGRAMA DE TRABAJO (Basado en ${selectedSubPackage?.deliveryTime})
-    5. 💳 RESUMEN FINANCIERO Y TÉRMINOS (Precio: ${selectedSubPackage?.price}, Términos: ${selectedSubPackage?.paymentTerms})
-    6. 🇩🇴 CONSIDERACIONES PARA EL MERCADO DOMINICANO (Cultura, tendencias locales, etc.)
-    
-    IMPORTANTE: No inventes precios ni tiempos. Usa exactamente los proporcionados. Sé extremadamente profesional y detallado.`;
-
     try {
-      const parts: any[] = [{ text: prompt }];
-
-      // Add images if available
-      if (images.length > 0) {
-        images.forEach(img => {
-          try {
-            const [header, data] = img.split(',');
-            const mimeType = header.split(':')[1].split(';')[0];
-            parts.push({
-              inlineData: {
-                mimeType,
-                data
-              }
-            });
-          } catch (e) {
-            console.error("Error processing image for AI:", e);
-          }
+      if (selectedCategory === 'Branding') {
+        const response = await fetch('/api/generate-branding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientName,
+            projectName,
+            subPackageId: selectedSubPackage?.id,
+            extraInfo: `${extraInfo}\nInstrucciones del chat: ${userInstructions}`,
+            images
+          })
         });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          const newProject: Project = {
+            id: Date.now().toString(),
+            clientName,
+            projectName,
+            extraInfo,
+            category: selectedCategory!,
+            subPackageId: selectedSubPackage!.id,
+            images,
+            status: 'completed',
+            createdAt: Date.now(),
+            result: data.data
+          };
+          setHistory(prev => [newProject, ...prev]);
+          setResult("¡Módulo de Branding ejecutado con éxito! Revisa la pestaña de Historial/Proyectos para ver los resultados.");
+        } else {
+          throw new Error(data.error);
+        }
+      } else {
+        // Fallback for other categories using Gemini directly for now
+        if (!process.env.GEMINI_API_KEY) {
+          throw new Error("La clave de API de Gemini no está configurada.");
+        }
+
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const model = "gemini-3-flash-preview";
+
+        const prompt = `Actúa como un Agente Maestro de Marketing y Tecnología en DigiMarket RD (República Dominicana). 
+        Tu tarea es generar un plan de ejecución y propuesta técnica IRREFUTABLE para un cliente.
+        
+        DATOS DEL CLIENTE:
+        - Cliente: ${clientName}
+        - Proyecto: ${projectName}
+        - Categoría: ${selectedCategory}
+        
+        DETALLES DEL PAQUETE SELECCIONADO:
+        - Nombre: ${selectedSubPackage?.name}
+        - Precio: ${selectedSubPackage?.price}
+        - Tiempo de Entrega: ${selectedSubPackage?.deliveryTime}
+        - Revisiones: ${selectedSubPackage?.revisions}
+        - Condiciones de Pago: ${selectedSubPackage?.paymentTerms}
+        - Características Incluidas: ${selectedSubPackage?.features.join(', ')}
+        
+        CONTEXTO ADICIONAL:
+        - Info Extra: ${extraInfo}
+        - Instrucciones del Chat: ${userInstructions}
+        
+        ESTRUCTURA DEL DOCUMENTO FINAL (Markdown):
+        1. 📋 RESUMEN DE LA PROPUESTA (Enfocado en el valor para el cliente)
+        2. 🎯 OBJETIVOS DEL PROYECTO (Específicos y medibles)
+        3. 🛠️ ALCANCE TÉCNICO Y CREATIVO (Detallar cada punto del paquete ${selectedSubPackage?.name})
+        4. 📅 CRONOGRAMA DE TRABAJO (Basado en ${selectedSubPackage?.deliveryTime})
+        5. 💳 RESUMEN FINANCIERO Y TÉRMINOS (Precio: ${selectedSubPackage?.price}, Términos: ${selectedSubPackage?.paymentTerms})
+        6. 🇩🇴 CONSIDERACIONES PARA EL MERCADO DOMINICANO (Cultura, tendencias locales, etc.)
+        
+        IMPORTANTE: No inventes precios ni tiempos. Usa exactamente los proporcionados. Sé extremadamente profesional y detallado.`;
+
+        const parts: any[] = [{ text: prompt }];
+
+        if (images.length > 0) {
+          images.forEach(img => {
+            try {
+              const [header, data] = img.url.split(',');
+              const mimeType = header.split(':')[1].split(';')[0];
+              parts.push({
+                text: `Esta imagen es de tipo: ${img.type.toUpperCase()}`
+              });
+              parts.push({
+                inlineData: {
+                  mimeType,
+                  data
+                }
+              });
+            } catch (e) {
+              console.error("Error processing image for AI:", e);
+            }
+          });
+        }
+
+        const response = await ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+        });
+
+        const text = response.text || "Error al generar el resultado.";
+        setResult(text);
+        
+        const newProject: Project = {
+          id: Date.now().toString(),
+          clientName,
+          projectName,
+          extraInfo,
+          category: selectedCategory!,
+          subPackageId: selectedSubPackage!.id,
+          images,
+          status: 'completed',
+          createdAt: Date.now(),
+          result: text
+        };
+        setHistory(prev => [newProject, ...prev]);
       }
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ role: 'user', parts }],
-      });
-
-      const text = response.text || "Error al generar el resultado.";
-      setResult(text);
-      setIsProcessing(false);
-      
-      const newProject: Project = {
-        id: Date.now().toString(),
-        clientName,
-        projectName,
-        extraInfo,
-        category: selectedCategory!,
-        subPackageId: selectedSubPackage!.id,
-        images,
-        status: 'completed',
-        createdAt: Date.now(),
-        result: text
-      };
-      setHistory(prev => [newProject, ...prev]);
     } catch (error: any) {
       console.error("Error generating content:", error);
       let errorMessage = "Hubo un error al conectar con los agentes. Por favor, intenta de nuevo.";
@@ -200,6 +235,7 @@ export default function App() {
       }
       
       setResult(errorMessage);
+    } finally {
       setIsProcessing(false);
     }
   };
@@ -439,25 +475,41 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-brand-muted uppercase tracking-wider">Imágenes de Referencia</h3>
-                    <button onClick={() => fileInputRef.current?.click()} className="text-xs font-bold text-brand-cyan flex items-center gap-1 hover:underline">
-                      <Plus size={14} /> Añadir
+                    <h3 className="text-xs font-bold text-brand-muted uppercase tracking-wider">Activos de Marca y Referencias</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <button onClick={() => { fileInputRef.current!.accept = "image/*"; fileInputRef.current!.onchange = (e) => handleImageUpload(e as any, 'logo'); fileInputRef.current?.click(); }} className="p-3 rounded-xl border-2 border-dashed border-brand-border flex flex-col items-center justify-center text-brand-muted hover:border-brand-cyan hover:text-brand-cyan transition-all">
+                      <ImageIcon size={20} className="mb-2" />
+                      <span className="text-[10px] font-bold uppercase">Subir Logo</span>
+                    </button>
+                    <button onClick={() => { fileInputRef.current!.accept = "image/*"; fileInputRef.current!.onchange = (e) => handleImageUpload(e as any, 'paleta'); fileInputRef.current?.click(); }} className="p-3 rounded-xl border-2 border-dashed border-brand-border flex flex-col items-center justify-center text-brand-muted hover:border-brand-cyan hover:text-brand-cyan transition-all">
+                      <Palette size={20} className="mb-2" />
+                      <span className="text-[10px] font-bold uppercase">Subir Paleta</span>
+                    </button>
+                    <button onClick={() => { fileInputRef.current!.accept = "image/*"; fileInputRef.current!.onchange = (e) => handleImageUpload(e as any, 'referencia'); fileInputRef.current?.click(); }} className="p-3 rounded-xl border-2 border-dashed border-brand-border flex flex-col items-center justify-center text-brand-muted hover:border-brand-cyan hover:text-brand-cyan transition-all">
+                      <ImagePlus size={20} className="mb-2" />
+                      <span className="text-[10px] font-bold uppercase">Subir Referencia</span>
                     </button>
                   </div>
-                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} multiple accept="image/*" className="hidden" />
-                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-                    {images.map((img, idx) => (
-                      <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-brand-border group">
-                        <img src={img} alt="Ref" className="w-full h-full object-cover" />
-                        <button onClick={() => removeImage(idx)} className="absolute top-0.5 right-0.5 bg-black/60 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Plus size={10} className="rotate-45" />
-                        </button>
-                      </div>
-                    ))}
-                    <button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-lg border-2 border-dashed border-brand-border flex items-center justify-center text-brand-muted hover:border-brand-cyan hover:text-brand-cyan transition-all">
-                      <ImageIcon size={16} />
-                    </button>
-                  </div>
+
+                  <input type="file" ref={fileInputRef} multiple className="hidden" />
+                  
+                  {images.length > 0 && (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mt-4 p-4 bg-brand-bg rounded-xl border border-brand-border">
+                      {images.map((img, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-brand-border group">
+                          <img src={img.url} alt="Ref" className="w-full h-full object-cover" />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[8px] font-bold text-center py-0.5 uppercase text-brand-cyan">
+                            {img.type}
+                          </div>
+                          <button onClick={() => removeImage(idx)} className="absolute top-0.5 right-0.5 bg-black/60 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Plus size={10} className="rotate-45" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </motion.section>
               )}
 
@@ -559,7 +611,7 @@ export default function App() {
                       <div className="flex items-center gap-3">
                         <button 
                           onClick={() => {
-                            setResult(proj.result || '');
+                            setResult(proj.result);
                             setClientName(proj.clientName);
                             setProjectName(proj.projectName);
                             setSelectedCategory(proj.category);
@@ -569,7 +621,7 @@ export default function App() {
                         >
                           Ver Detalles
                         </button>
-                        <button onClick={() => navigator.clipboard.writeText(proj.result || '')} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-cyan transition-colors">
+                        <button onClick={() => navigator.clipboard.writeText(typeof proj.result === 'string' ? proj.result : JSON.stringify(proj.result))} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-cyan transition-colors">
                           <Copy size={16} />
                         </button>
                       </div>
@@ -592,19 +644,106 @@ export default function App() {
               <div className="p-6 border-b border-brand-border bg-brand-bg/50 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="text-green-500" />
-                  <h3 className="text-lg font-bold">Propuesta Técnica Final</h3>
+                  <h3 className="text-lg font-bold">Resultado Final</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => navigator.clipboard.writeText(result)} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold hover:border-brand-cyan transition-colors">
+                  <button onClick={() => navigator.clipboard.writeText(typeof result === 'string' ? result : JSON.stringify(result))} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold hover:border-brand-cyan transition-colors">
                     <Copy size={14} /> Copiar
                   </button>
-                  <button onClick={() => setResult('')} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-white transition-colors">
+                  <button onClick={() => setResult(null)} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-white transition-colors">
                     <Plus size={18} className="rotate-45" />
                   </button>
                 </div>
               </div>
-              <div className="p-8 prose prose-invert max-w-none text-brand-text leading-relaxed text-sm">
-                <ReactMarkdown>{result}</ReactMarkdown>
+              <div className="p-8">
+                {typeof result === 'string' ? (
+                  <div className="prose prose-invert max-w-none text-brand-text leading-relaxed text-sm">
+                    <ReactMarkdown>{result}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {/* Logos Section */}
+                    {result.generatedLogos && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <ImageIcon size={20} className="text-brand-cyan" />
+                          Propuestas de Logo
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                          {result.generatedLogos.map((logo: string, idx: number) => (
+                            <div key={idx} className="bg-brand-bg rounded-xl border border-brand-border overflow-hidden group">
+                              <div className="aspect-square relative">
+                                <img src={logo} alt={`Propuesta ${idx + 1}`} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <a href={logo} download={`logo-propuesta-${idx+1}.jpg`} className="bg-brand-cyan text-brand-dark px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2">
+                                    <Copy size={16} /> Descargar
+                                  </a>
+                                </div>
+                              </div>
+                              <div className="p-3 text-center border-t border-brand-border">
+                                <span className="text-xs font-bold text-brand-muted uppercase">Propuesta {idx + 1}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Color Palette */}
+                    {result.colorPalette && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Palette size={20} className="text-brand-cyan" />
+                          Paleta de Colores
+                        </h3>
+                        <div className="flex flex-wrap gap-4">
+                          {result.colorPalette.map((color: any, idx: number) => (
+                            <div key={idx} className="flex flex-col items-center">
+                              <div 
+                                className="w-16 h-16 rounded-full shadow-lg border-2 border-brand-border mb-2"
+                                style={{ backgroundColor: color.hex }}
+                              />
+                              <span className="text-xs font-bold text-white">{color.hex}</span>
+                              <span className="text-[10px] text-brand-muted uppercase">{color.usage}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Typography */}
+                    {result.typography && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Layout size={20} className="text-brand-cyan" />
+                          Tipografías
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {result.typography.map((type: any, idx: number) => (
+                            <div key={idx} className="bg-brand-bg p-4 rounded-xl border border-brand-border">
+                              <div className="text-xs font-bold text-brand-cyan uppercase mb-1">{type.usage}</div>
+                              <div className="text-xl font-bold text-white">{type.name}</div>
+                              <div className="text-3xl mt-2 opacity-50" style={{ fontFamily: type.name }}>Aa Bb Cc</div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Brand Manual */}
+                    {result.brandManual && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <CheckCircle2 size={20} className="text-brand-cyan" />
+                          Manual de Marca
+                        </h3>
+                        <div className="bg-brand-bg p-6 rounded-xl border border-brand-border prose prose-invert prose-brand max-w-none">
+                          <ReactMarkdown>{result.brandManual}</ReactMarkdown>
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

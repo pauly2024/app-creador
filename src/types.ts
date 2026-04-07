@@ -18,10 +18,10 @@ export interface Project {
   extraInfo: string;
   category: CategoryType;
   subPackageId: string;
-  images: string[];
+  images: {url: string, type: 'logo' | 'referencia' | 'paleta'}[];
   status: 'pending' | 'processing' | 'completed';
   createdAt: number;
-  result?: string;
+  result?: any; // Will hold the structured result from the API
 }
 
 export interface ChatMessage {
