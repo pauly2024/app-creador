@@ -118,7 +118,7 @@ export default function App() {
           body: JSON.stringify({
             clientName,
             projectName,
-            subPackageId: selectedSubPackage?.id,
+            subPackage: selectedSubPackage,
             extraInfo: `${extraInfo}\nInstrucciones del chat: ${userInstructions}`,
             images
           })
@@ -147,7 +147,7 @@ export default function App() {
             result: data.data
           };
           setHistory(prev => [newProject, ...prev]);
-          setResult(`¡Módulo de ${selectedCategory} ejecutado con éxito! Revisa la pestaña de Historial/Proyectos para ver los resultados.`);
+          setResult(data.data); // Store the full result object
         } else {
           throw new Error(data.error);
         }
@@ -674,6 +674,34 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-8">
+                    {/* Code Files */}
+                    {result.code && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Copy size={20} className="text-brand-cyan" />
+                          Código Generado
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {Object.entries(result.code).map(([filename, content]: [string, any], idx: number) => (
+                            <div key={idx} className="bg-brand-bg p-4 rounded-xl border border-brand-border">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-brand-cyan uppercase">{filename}</span>
+                                <button 
+                                  onClick={() => navigator.clipboard.writeText(content)}
+                                  className="text-brand-muted hover:text-white transition-colors"
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              </div>
+                              <pre className="text-xs text-brand-text overflow-x-auto bg-brand-dark p-2 rounded">
+                                <code>{content}</code>
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
                     {/* Logos Section */}
                     {result.generatedLogos && (
                       <section>

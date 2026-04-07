@@ -23,7 +23,8 @@ async function startServer() {
 
   app.post("/api/generate-branding", async (req, res) => {
     try {
-      const { clientName, subPackageId, extraInfo, images } = req.body;
+      const { clientName, subPackage, extraInfo, images } = req.body;
+      const { features, name } = subPackage;
 
       // Convert images to Gemini parts if they exist
       const imageParts = (images || []).map((img: string) => {
@@ -36,26 +37,25 @@ async function startServer() {
         };
       });
 
-      // Determine number of logo proposals based on package
-      let numLogos = 3;
-      if (subPackageId === 'branding-2') numLogos = 4;
-      if (subPackageId === 'branding-3') numLogos = 5;
-      if (subPackageId === 'branding-4') numLogos = 1;
-
       // 1. Use Gemini to generate the Brand Strategy and Logo Prompts
       const prompt = `
         Eres el Director Creativo de DigiMarket RD.
         Crea la identidad visual para el cliente: "${clientName}".
         Información adicional: "${extraInfo}".
         
+        PAQUETE SELECCIONADO: ${name}
+        CARACTERÍSTICAS OBLIGATORIAS A ENTREGAR:
+        ${features.map((f: string) => `- ${f}`).join('\n')}
+        
         IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
         Analiza estas imágenes para entender el estilo visual preferido del cliente.
         
-        Debes generar:
-        1. Un manual de marca en formato Markdown (Misión, Visión, Tono de voz, Reglas de uso).
-        2. Una paleta de colores (3 a 5 colores) con sus códigos HEX.
-        3. Tipografías recomendadas (Principal y Secundaria).
-        4. Exactamente ${numLogos} prompts detallados en INGLÉS para generar los logos en una IA de imágenes. Los prompts deben ser descriptivos, profesionales, indicando "vector logo, minimalist, flat design, white background" para asegurar buenos resultados.
+        DEBES GENERAR UNA RESPUESTA JSON CON:
+        1. "brandManual": Manual de marca en Markdown.
+        2. "colorPalette": Array de objetos {hex, name, usage}.
+        3. "typography": Array de objetos {name, usage}.
+        4. "logoPrompts": Array de prompts detallados para generar logos.
+        5. "code": Objeto con los archivos necesarios (ej. {"manual.md": "...", "estilos.css": "..."}) que implementen TODAS las características obligatorias listadas arriba.
       `;
 
       const response = await ai.models.generateContent({
@@ -101,10 +101,15 @@ async function startServer() {
               logoPrompts: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: `Exactamente ${numLogos} prompts en inglés para generar logos`
+                description: "Prompts en inglés para generar logos"
+              },
+              code: {
+                type: Type.OBJECT,
+                additionalProperties: { type: Type.STRING },
+                description: "Mapa de archivos: nombre del archivo -> contenido del código"
               }
             },
-            required: ["brandManual", "colorPalette", "typography", "logoPrompts"]
+            required: ["brandManual", "colorPalette", "typography", "logoPrompts", "code"]
           }
         }
       });
@@ -112,54 +117,9 @@ async function startServer() {
       const resultText = response.text || "{}";
       const brandingData = JSON.parse(resultText);
 
-      // 2. Generate Logos using Pollinations.ai (Free, No API Key needed) as fallback, 
-      // or HuggingFace if API key is provided.
-      const generatedLogos = [];
-      for (let i = 0; i < brandingData.logoPrompts.length; i++) {
-        const logoPrompt = brandingData.logoPrompts[i];
-        
-        if (process.env.HUGGINGFACE_API_KEY) {
-          try {
-            // Using Hugging Face FLUX.1-schnell
-            const hfResponse = await fetch(
-              "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                method: "POST",
-                body: JSON.stringify({ inputs: logoPrompt }),
-              }
-            );
-            
-            if (hfResponse.ok) {
-              const arrayBuffer = await hfResponse.arrayBuffer();
-              const buffer = Buffer.from(arrayBuffer);
-              const base64 = buffer.toString('base64');
-              generatedLogos.push(`data:image/jpeg;base64,${base64}`);
-              continue; // Skip pollinations if HF succeeds
-            } else {
-              console.warn("HuggingFace failed, falling back to Pollinations");
-            }
-          } catch (e) {
-            console.error("Error with HuggingFace:", e);
-          }
-        }
-        
-        // Fallback to Pollinations.ai
-        const encodedPrompt = encodeURIComponent(logoPrompt + " professional vector logo, white background, high quality");
-        // Add a random seed to avoid caching identical prompts
-        const seed = Math.floor(Math.random() * 100000);
-        generatedLogos.push(`https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1024&height=1024&nologo=true`);
-      }
-
       res.json({
         success: true,
-        data: {
-          ...brandingData,
-          generatedLogos
-        }
+        data: brandingData
       });
 
     } catch (error: any) {
@@ -170,7 +130,8 @@ async function startServer() {
 
   app.post("/api/generate-web", async (req, res) => {
     try {
-      const { clientName, subPackageId, extraInfo, images } = req.body;
+      const { clientName, subPackage, extraInfo, images } = req.body;
+      const { features, name } = subPackage;
 
       // Convert images to Gemini parts if they exist
       const imageParts = (images || []).map((img: string) => {
@@ -188,14 +149,19 @@ async function startServer() {
         Crea la estructura y el copy para la web del cliente: "${clientName}".
         Información adicional: "${extraInfo}".
         
+        PAQUETE SELECCIONADO: ${name}
+        CARACTERÍSTICAS OBLIGATORIAS A ENTREGAR:
+        ${features.map((f: string) => `- ${f}`).join('\n')}
+        
         IMPORTANTE: Se han proporcionado ${imageParts.length} imágenes de referencia. 
         Analiza estas imágenes para entender la marca, el estilo y el contenido. 
         Úsalas para proponer un diseño coherente.
         
-        Debes generar:
-        1. Un Sitemap (lista de páginas sugeridas).
-        2. El Copy principal para la página de Inicio (Hero Title, Subtitle, Call to Action).
-        3. Un prompt en INGLÉS para generar un mockup visual de la página web (ej. "modern website landing page design for [industry], UI/UX, dribbble style, clean, high resolution").
+        DEBES GENERAR UNA RESPUESTA JSON CON:
+        1. "sitemap": Array de páginas.
+        2. "heroCopy": Objeto con {title, subtitle, cta}.
+        3. "mockupPrompt": Prompt para generar mockup.
+        4. "code": Objeto con los archivos necesarios (ej. {"index.html": "...", "style.css": "...", "script.js": "..."}) que implementen TODAS las características obligatorias listadas arriba.
       `;
 
       const response = await ai.models.generateContent({
@@ -224,9 +190,14 @@ async function startServer() {
                 },
                 required: ["title", "subtitle", "cta"]
               },
-              mockupPrompt: { type: Type.STRING }
+              mockupPrompt: { type: Type.STRING },
+              code: {
+                type: Type.OBJECT,
+                additionalProperties: { type: Type.STRING },
+                description: "Mapa de archivos: nombre del archivo -> contenido del código"
+              }
             },
-            required: ["sitemap", "heroCopy", "mockupPrompt"]
+            required: ["sitemap", "heroCopy", "mockupPrompt", "code"]
           }
         }
       });
@@ -247,7 +218,8 @@ async function startServer() {
 
   app.post("/api/generate-social", async (req, res) => {
     try {
-      const { clientName, subPackageId, extraInfo, images } = req.body;
+      const { clientName, subPackage, extraInfo, images } = req.body;
+      const { features, name } = subPackage;
 
       // Convert images to Gemini parts if they exist
       const imageParts = (images || []).map((img: string) => {
@@ -262,20 +234,23 @@ async function startServer() {
 
       const prompt = `
         Eres el Social Media Manager de DigiMarket RD.
-        Crea una tanda de 4 posts para las redes sociales del cliente: "${clientName}".
+        Crea una tanda de posts para las redes sociales del cliente: "${clientName}".
         Información adicional: "${extraInfo}".
+        
+        PAQUETE SELECCIONADO: ${name}
+        CARACTERÍSTICAS OBLIGATORIAS A ENTREGAR:
+        ${features.map((f: string) => `- ${f}`).join('\n')}
         
         IMPORTANTE - GUÍA DE ESTILO: 
         Se ha proporcionado una imagen de referencia. 
         1. Analiza profundamente el estilo visual de esta imagen (colores, iluminación, tipo de fotografía, ambiente).
         2. El POST #1 DEBE usar obligatoriamente la imagen de referencia proporcionada (referenceImageIndex: 0).
-        3. Para los POSTS #2, #3 y #4, debes generar prompts en INGLÉS que describan escenas NUEVAS pero que mantengan EXACTAMENTE el mismo estilo visual, paleta de colores y "vibe" de la imagen de referencia. Queremos que parezcan de la misma sesión de fotos.
+        3. Para los POSTS siguientes, debes generar prompts en INGLÉS que describan escenas NUEVAS pero que mantengan EXACTAMENTE el mismo estilo visual, paleta de colores y "vibe" de la imagen de referencia. Queremos que parezcan de la misma sesión de fotos.
         
-        Para cada post debes generar:
-        1. El texto (copy) persuasivo con emojis.
-        2. Los hashtags recomendados.
-        3. Un prompt detallado en INGLÉS para generar la imagen (solo para los posts que no usan la referencia).
-        4. El índice de la imagen de referencia a usar (0 para el primer post, null para los demás).
+        DEBES GENERAR UNA RESPUESTA JSON CON:
+        1. "strategy": Breve resumen de la estrategia de consistencia visual.
+        2. "posts": Array de objetos {copy, hashtags, imagePrompt, referenceImageIndex}.
+        3. "code": Objeto con los archivos necesarios (ej. {"post1.md": "...", "post2.md": "..."}) que implementen TODAS las características obligatorias listadas arriba.
       `;
 
       const response = await ai.models.generateContent({
@@ -307,9 +282,14 @@ async function startServer() {
                   },
                   required: ["copy", "hashtags", "imagePrompt"]
                 }
+              },
+              code: {
+                type: Type.OBJECT,
+                additionalProperties: { type: Type.STRING },
+                description: "Mapa de archivos: nombre del archivo -> contenido del código"
               }
             },
-            required: ["strategy", "posts"]
+            required: ["strategy", "posts", "code"]
           }
         }
       });
@@ -336,7 +316,7 @@ async function startServer() {
         generatedPosts.push({ ...post, imageUrl });
       }
 
-      res.json({ success: true, data: { strategy: socialData.strategy, posts: generatedPosts } });
+      res.json({ success: true, data: { ...socialData, posts: generatedPosts } });
     } catch (error: any) {
       console.error("Error generating social:", error);
       res.status(500).json({ success: false, error: error.message });
