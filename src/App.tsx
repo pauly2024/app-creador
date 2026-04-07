@@ -119,7 +119,14 @@ export default function App() {
           })
         });
 
-        const data = await response.json();
+        let data;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`Error del servidor: ${response.status} - ${text.substring(0, 100)}...`);
+        }
         
         if (data.success) {
           const newProject: Project = {

@@ -7,8 +7,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 // Load environment variables
 dotenv.config();
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -23,6 +21,13 @@ async function startServer() {
 
   app.post("/api/generate-branding", async (req, res) => {
     try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ success: false, error: "GEMINI_API_KEY no está configurada en el servidor." });
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
       const { clientName, subPackageId, extraInfo, images } = req.body;
 
       // Determine number of logo proposals based on package
