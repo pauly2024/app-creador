@@ -106,8 +106,13 @@ export default function App() {
 
   const generateFinalResult = async (userInstructions: string) => {
     try {
-      if (selectedCategory === 'Branding') {
-        const response = await fetch('/api/generate-branding', {
+      let endpoint = '';
+      if (selectedCategory === 'Branding') endpoint = '/api/generate-branding';
+      else if (selectedCategory === 'Desarrollo Web' || selectedCategory === 'Aplicaciones Web') endpoint = '/api/generate-web';
+      else if (selectedCategory === 'Social Media') endpoint = '/api/generate-social';
+
+      if (endpoint) {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -142,7 +147,7 @@ export default function App() {
             result: data.data
           };
           setHistory(prev => [newProject, ...prev]);
-          setResult("¡Módulo de Branding ejecutado con éxito! Revisa la pestaña de Historial/Proyectos para ver los resultados.");
+          setResult(`¡Módulo de ${selectedCategory} ejecutado con éxito! Revisa la pestaña de Historial/Proyectos para ver los resultados.`);
         } else {
           throw new Error(data.error);
         }
@@ -746,6 +751,102 @@ export default function App() {
                         </h3>
                         <div className="bg-brand-bg p-6 rounded-xl border border-brand-border prose prose-invert prose-brand max-w-none">
                           <ReactMarkdown>{result.brandManual}</ReactMarkdown>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Web Mockup */}
+                    {result.mockupImage && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Globe size={20} className="text-brand-cyan" />
+                          Mockup Visual de la Web
+                        </h3>
+                        <div className="bg-brand-bg rounded-xl border border-brand-border overflow-hidden">
+                          <img src={result.mockupImage} alt="Web Mockup" className="w-full h-auto" />
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Web Sitemap */}
+                    {result.sitemap && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Layout size={20} className="text-brand-cyan" />
+                          Sitemap Propuesto
+                        </h3>
+                        <div className="bg-brand-bg p-6 rounded-xl border border-brand-border">
+                          <ul className="list-disc list-inside space-y-2 text-brand-text">
+                            {result.sitemap.map((page: string, idx: number) => (
+                              <li key={idx}>{page}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Web Hero Copy */}
+                    {result.heroCopy && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <MessageSquare size={20} className="text-brand-cyan" />
+                          Copy Principal (Inicio)
+                        </h3>
+                        <div className="bg-brand-bg p-6 rounded-xl border border-brand-border space-y-4">
+                          <div>
+                            <span className="text-xs font-bold text-brand-cyan uppercase">Título Principal (H1)</span>
+                            <h1 className="text-3xl font-bold text-white mt-1">{result.heroCopy.title}</h1>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-brand-cyan uppercase">Subtítulo</span>
+                            <p className="text-lg text-brand-text mt-1">{result.heroCopy.subtitle}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-brand-cyan uppercase">Call to Action (Botón)</span>
+                            <div className="mt-2 inline-block px-6 py-3 bg-brand-cyan text-brand-dark font-bold rounded-xl">
+                              {result.heroCopy.cta}
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Social Media Strategy */}
+                    {result.strategy && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <Share2 size={20} className="text-brand-cyan" />
+                          Estrategia de Contenido
+                        </h3>
+                        <div className="bg-brand-bg p-6 rounded-xl border border-brand-border text-brand-text">
+                          <p>{result.strategy}</p>
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Social Media Posts */}
+                    {result.posts && (
+                      <section>
+                        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                          <ImageIcon size={20} className="text-brand-cyan" />
+                          Primera Tanda de Contenido (Posts)
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {result.posts.map((post: any, idx: number) => (
+                            <div key={idx} className="bg-brand-bg rounded-xl border border-brand-border overflow-hidden flex flex-col">
+                              <div className="aspect-square relative bg-brand-dark">
+                                <img src={post.imageUrl} alt={`Post ${idx + 1}`} className="w-full h-full object-cover" />
+                              </div>
+                              <div className="p-6 flex-1 flex flex-col">
+                                <div className="prose prose-invert text-sm text-brand-text mb-4 flex-1 whitespace-pre-wrap">
+                                  {post.copy}
+                                </div>
+                                <div className="text-xs font-bold text-brand-cyan mt-auto">
+                                  {post.hashtags}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </section>
                     )}

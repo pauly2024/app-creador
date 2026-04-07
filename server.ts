@@ -7,6 +7,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 // Load environment variables
 dotenv.config();
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -21,13 +23,6 @@ async function startServer() {
 
   app.post("/api/generate-branding", async (req, res) => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ success: false, error: "GEMINI_API_KEY no está configurada en el servidor." });
-      }
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
       const { clientName, subPackageId, extraInfo, images } = req.body;
 
       // Determine number of logo proposals based on package
@@ -147,6 +142,121 @@ async function startServer() {
 
     } catch (error: any) {
       console.error("Error generating branding:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/generate-web", async (req, res) => {
+    try {
+      const { clientName, subPackageId, extraInfo, images } = req.body;
+
+      const prompt = `
+        Eres el Director de Desarrollo Web de DigiMarket RD.
+        Crea la estructura y el copy para la web del cliente: "${clientName}".
+        Información adicional: "${extraInfo}".
+        
+        Debes generar:
+        1. Un Sitemap (lista de páginas sugeridas).
+        2. El Copy principal para la página de Inicio (Hero Title, Subtitle, Call to Action).
+        3. Un prompt en INGLÉS para generar un mockup visual de la página web (ej. "modern website landing page design for [industry], UI/UX, dribbble style, clean, high resolution").
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              sitemap: { type: Type.ARRAY, items: { type: Type.STRING } },
+              heroCopy: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  subtitle: { type: Type.STRING },
+                  cta: { type: Type.STRING }
+                },
+                required: ["title", "subtitle", "cta"]
+              },
+              mockupPrompt: { type: Type.STRING }
+            },
+            required: ["sitemap", "heroCopy", "mockupPrompt"]
+          }
+        }
+      });
+
+      const webData = JSON.parse(response.text || "{}");
+
+      // Generate Mockup
+      const encodedPrompt = encodeURIComponent(webData.mockupPrompt + " modern website UI UX design, high quality, dribbble, behance");
+      const seed = Math.floor(Math.random() * 100000);
+      const mockupImage = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1280&height=800&nologo=true`;
+
+      res.json({ success: true, data: { ...webData, mockupImage } });
+    } catch (error: any) {
+      console.error("Error generating web:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/generate-social", async (req, res) => {
+    try {
+      const { clientName, subPackageId, extraInfo, images } = req.body;
+
+      const prompt = `
+        Eres el Social Media Manager de DigiMarket RD.
+        Crea una tanda de 4 posts para las redes sociales del cliente: "${clientName}".
+        Información adicional: "${extraInfo}".
+        
+        Para cada post debes generar:
+        1. El texto (copy) persuasivo con emojis.
+        2. Los hashtags recomendados.
+        3. Un prompt detallado en INGLÉS para generar la imagen del post en una IA (ej. "professional photography of a coffee cup on a wooden table, cinematic lighting").
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              strategy: { type: Type.STRING, description: "Breve resumen de la estrategia" },
+              posts: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    copy: { type: Type.STRING },
+                    hashtags: { type: Type.STRING },
+                    imagePrompt: { type: Type.STRING }
+                  },
+                  required: ["copy", "hashtags", "imagePrompt"]
+                }
+              }
+            },
+            required: ["strategy", "posts"]
+          }
+        }
+      });
+
+      const socialData = JSON.parse(response.text || "{}");
+
+      // Generate Images
+      const generatedPosts = [];
+      for (let i = 0; i < socialData.posts.length; i++) {
+        const post = socialData.posts[i];
+        const encodedPrompt = encodeURIComponent(post.imagePrompt + " high quality photography, social media post, professional");
+        const seed = Math.floor(Math.random() * 100000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1080&height=1080&nologo=true`;
+        generatedPosts.push({ ...post, imageUrl });
+      }
+
+      res.json({ success: true, data: { strategy: socialData.strategy, posts: generatedPosts } });
+    } catch (error: any) {
+      console.error("Error generating social:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
