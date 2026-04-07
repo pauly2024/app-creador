@@ -7,7 +7,5 @@ coverage/
 .env*
 !.env.example
 .env.local
-node_modules/
-
 .vercel
 .env*.local
