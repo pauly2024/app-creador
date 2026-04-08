@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
-    const { clientName, extraInfo, images } = req.body;
+    const { clientName, extraInfo, images, subPackage } = req.body;
 
     let imageContext = "";
     if (images && images.length > 0 && process.env.GEMINI_API_KEY) {
@@ -26,9 +26,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    const packageContext = subPackage ? `Paquete solicitado: ${subPackage.name}. Características incluidas: ${subPackage.features.join(', ')}.` : '';
+
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: `Eres el Director de Desarrollo Web de DigiMarket RD. Crea la estructura y copy para la web de: "${clientName}". Información adicional: "${extraInfo}". ${imageContext} Responde SOLO con JSON: { "sitemap": ["Inicio", "Servicios", "Contacto"], "heroCopy": { "title": "Título", "subtitle": "Subtítulo", "cta": "Botón" }, "mockupPrompt": "modern website landing page design for [industry], UI/UX, dribbble style" } Asegúrate de que el mockupPrompt refleje fielmente el contexto visual si se proporcionó.` }],
+      messages: [{ role: "user", content: `Eres el Director de Desarrollo Web de DigiMarket RD.
+Crea la estructura, copy y genera el CÓDIGO FUNCIONAL para la web o web app de: "${clientName}".
+${packageContext} 
+Información adicional: "${extraInfo}". 
+${imageContext}
+
+IMPORTANTE: El paquete dicta la complejidad. Si es una Landing Page, genera un index.html con CSS. Si es un E-commerce o App Web, diseña una estructura apropiada generándola en HTML/JS/CSS funcional y estético (UI moderna, premium).
+
+Responde SOLO con JSON siguiendo exactamente esta estructura:
+{
+  "sitemap": ["Inicio", "Servicios", "Contacto"],
+  "heroCopy": { "title": "Título", "subtitle": "Subtítulo", "cta": "Botón" },
+  "mockupPrompt": "modern website landing page design for [industry], UI/UX, dribbble style",
+  "code": {
+    "index.html": "<!DOCTYPE html>...",
+    "style.css": "body { ... }",
+    "main.js": "..."
+  }
+}
+Asegúrate de que 'mockupPrompt' incluya detalles del contexto visual y de que en 'code' devuelvas el código HTML, CSS y JS completamente desarrollado y alineado con los requerimientos.` }],
       temperature: 0.7,
       response_format: { type: "json_object" }
     });
