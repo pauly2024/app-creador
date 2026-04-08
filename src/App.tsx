@@ -30,6 +30,7 @@ import { auth, db } from './firebase';
 import { CategoryType, SubPackage, Project, ChatMessage } from './types';
 import { PACKAGES_DATA } from './constants';
 import Logo from './components/Logo';
+import html2canvas from 'html2canvas';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -186,7 +187,11 @@ export default function App() {
             createdAt: Date.now(),
             result: data.data
           };
-          setHistory(prev => [newProject, ...prev]);
+          setHistory(prev => {
+            const newHistory = [newProject, ...prev];
+            localStorage.setItem('digimarket_proyectos', JSON.stringify(newHistory));
+            return newHistory;
+          });
           setResult(data.data); // Store the full result object
         } else {
           throw new Error(data.error);
@@ -273,7 +278,11 @@ export default function App() {
           createdAt: Date.now(),
           result: text
         };
-        setHistory(prev => [newProject, ...prev]);
+        setHistory(prev => {
+          const newHistory = [newProject, ...prev];
+          localStorage.setItem('digimarket_proyectos', JSON.stringify(newHistory));
+          return newHistory;
+        });
       }
     } catch (error: any) {
       console.error("Error generating content:", error);
@@ -360,14 +369,22 @@ export default function App() {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
+      // First load from localStorage to be instantaneous
+      const localData = localStorage.getItem('digimarket_proyectos');
+      if (localData) {
+        setHistory(JSON.parse(localData));
+      }
+
       const response = await fetch('/api/get-projects');
       const contentType = response.headers.get('content-type');
       
       if (!contentType || !contentType.includes('application/json')) {
         const message = `Tipo de respuesta inválido: ${contentType}`;
         console.error(message);
-        setHistory([]);
-        setHistoryError(message);
+        if (!localData) {
+          setHistory([]);
+          setHistoryError(message);
+        }
         return;
       }
       
@@ -387,19 +404,34 @@ export default function App() {
           result: p.branding || p.web || p.social || p.app
         })) : [];
 
-        setHistory(firebaseProjects);
-        if (firebaseProjects.length > 0) {
+        // Merge firebase and local projects (prioritize local if newer, or simple union)
+        // For simplicity, we just use the fetched ones or merge
+        const allProjectsMap = new Map();
+        if (localData) {
+          JSON.parse(localData).forEach((p: Project) => allProjectsMap.set(p.id, p));
+        }
+        firebaseProjects.forEach(p => allProjectsMap.set(p.id, p));
+        const mergedProjects = Array.from(allProjectsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+
+        setHistory(mergedProjects);
+        localStorage.setItem('digimarket_proyectos', JSON.stringify(mergedProjects));
+
+        if (mergedProjects.length > 0) {
           setActiveTab('history');
         }
       } else {
         console.error('Error loading projects:', data.error);
-        setHistory([]);
-        setHistoryError(data.error || 'No se pudo cargar el historial');
+        if (!localData) {
+          setHistory([]);
+          setHistoryError(data.error || 'No se pudo cargar el historial');
+        }
       }
     } catch (error: any) {
       console.error('Error loading projects:', error);
-      setHistory([]);
-      setHistoryError(error.message || 'Error desconocido al cargar el historial');
+      if (history.length === 0) {
+        setHistory([]);
+        setHistoryError(error.message || 'Error desconocido al cargar el historial');
+      }
     } finally {
       setHistoryLoading(false);
     }
@@ -408,6 +440,10 @@ export default function App() {
   // Cargar proyectos al iniciar
   useEffect(() => {
     if (isLoggedIn) {
+      const localData = localStorage.getItem('digimarket_proyectos');
+      if (localData) {
+        setHistory(JSON.parse(localData));
+      }
       loadProjects();
     }
   }, [isLoggedIn]);
@@ -844,6 +880,32 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-3">
                         <button 
+                          onClick={async () => {
+                            // Temporal render of the result to an off-screen element if not active tab
+                            // Or simpler: download JSON if can't render, but we will add PNG download in active tab instead!
+                            try {
+                              const el = document.getElementById(`proj-result-${proj.id}`);
+                              if (el) {
+                                const canvas = await html2canvas(el);
+                                const link = document.createElement('a');
+                                link.download = `${proj.projectName}.png`;
+                                link.href = canvas.toDataURL('image/png');
+                                link.click();
+                              } else {
+                                // If not rendered on screen, fallback to JSON or show details first
+                                navigator.clipboard.writeText(typeof proj.result === 'string' ? proj.result : JSON.stringify(proj.result));
+                                alert("Copiado al portapapeles. Abre 'Ver Detalles' para poder descargar la imagen (PNG).");
+                              }
+                            } catch(e) {
+                              console.error(e);
+                            }
+                          }}
+                          title="Copiar / Descargar PNG"
+                          className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-cyan transition-colors"
+                        >
+                          <Copy size={16} />
+                        </button>
+                        <button 
                           onClick={() => {
                             setResult(proj.result);
                             setClientName(proj.clientName);
@@ -854,9 +916,6 @@ export default function App() {
                           className="px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold hover:border-brand-cyan transition-colors"
                         >
                           Ver Detalles
-                        </button>
-                        <button onClick={() => navigator.clipboard.writeText(typeof proj.result === 'string' ? proj.result : JSON.stringify(proj.result))} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-cyan transition-colors">
-                          <Copy size={16} />
                         </button>
                       </div>
                     </div>
@@ -1143,12 +1202,32 @@ export default function App() {
               exit={{ opacity: 0, y: 50 }}
               className="mt-12 bg-brand-card border border-brand-border rounded-2xl overflow-hidden shadow-2xl"
             >
-              <div className="p-6 border-b border-brand-border bg-brand-bg/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="text-green-500" />
+              <div className="p-6 border-b border-brand-border bg-brand-bg/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3 w-full sm:w-auto text-left">
+                  <CheckCircle2 className="text-green-500 flex-shrink-0" />
                   <h3 className="text-lg font-bold">Resultado Final</h3>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button 
+                    onClick={async () => {
+                      const el = document.getElementById('resultado-final');
+                      if (el) {
+                        try {
+                          const canvas = await html2canvas(el, { useCORS: true, allowTaint: true });
+                          const link = document.createElement('a');
+                          link.download = `${projectName || 'Resultado'}.png`;
+                          link.href = canvas.toDataURL('image/png');
+                          link.click();
+                        } catch (err) {
+                          console.error('Error generando PNG', err);
+                          alert('Ocurrió un error al generar la imagen PNG. Posible restricción de CORS en imágenes externas.');
+                        }
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-cyan text-black rounded-xl text-xs font-bold hover:bg-[#00cfff] transition-colors"
+                  >
+                    <ImagePlus size={14} /> Descargar PNG
+                  </button>
                   <button onClick={() => navigator.clipboard.writeText(typeof result === 'string' ? result : JSON.stringify(result))} className="flex items-center gap-2 px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold hover:border-brand-cyan transition-colors">
                     <Copy size={14} /> Copiar
                   </button>
@@ -1157,7 +1236,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <div className="p-8">
+              <div id="resultado-final" className="p-8 relative bg-brand-card">
                 {typeof result === 'string' ? (
                   <div className="prose prose-invert max-w-none text-brand-text leading-relaxed text-sm">
                     <ReactMarkdown>{result}</ReactMarkdown>

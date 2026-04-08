@@ -1,6 +1,7 @@
 import Replicate from "replicate";
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from "groq-sdk";
+import { GoogleGenAI } from "@google/genai";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -9,7 +10,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
-    const { clientName, subPackageId, extraInfo } = req.body;
+    const { clientName, subPackageId, extraInfo, images } = req.body;
+
+    let imageContext = "";
+    if (images && images.length > 0 && process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const parts: any[] = [{ text: "Describe con gran detalle el estilo visual, los colores, la vibra y referencias de diseño de estas imágenes subidas por el cliente." }];
+        images.forEach((img: any) => {
+          const [header, data] = img.url.split(',');
+          const mimeType = header.split(':')[1].split(';')[0];
+          parts.push({ text: `Tipo: ${img.type}` });
+          parts.push({ inlineData: { mimeType, data } });
+        });
+        const visionResponse = await ai.models.generateContent({ model: "gemini-1.5-flash", contents: [{ role: "user", parts }] });
+        imageContext = `\nContexto visual extraído de referencias del cliente: ${visionResponse.text}`;
+      } catch (e) {
+        console.warn("Error extracting visual context", e);
+      }
+    }
 
     let numLogos = 3;
     if (subPackageId === 'branding-2') numLogos = 4;
@@ -20,6 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Eres el Director Creativo de DigiMarket RD.
       Crea la identidad visual para el cliente: "${clientName}".
       Información adicional: "${extraInfo}".
+      ${imageContext}
       
       Debes generar un JSON con exactamente esta estructura:
       {
@@ -35,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ]
       }
       
-      Genera exactamente ${numLogos} prompts en logoPrompts.
+      Genera exactamente ${numLogos} prompts en logoPrompts coherentes con el contexto visual si fue provisto.
       Responde SOLO con el JSON, sin explicaciones ni markdown.
     `;
 
