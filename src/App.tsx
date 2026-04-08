@@ -57,6 +57,8 @@ export default function App() {
   const [currentInput, setCurrentInput] = useState('');
   const [result, setResult] = useState<any>(null);
   const [history, setHistory] = useState<Project[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'form' | 'history' | 'ai'>('form');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResult, setAiResult] = useState('');
@@ -294,20 +296,33 @@ export default function App() {
   // Funciones para persistencia en Firebase
   const saveProject = async () => {
     if (!result) {
-      alert('No hay resultado para guardar');
+      alert('No hay resultado para guardar. Genera una propuesta primero.');
       return;
+    }
+
+    if (!clientName.trim()) {
+      alert('Ingresa el nombre del cliente antes de guardar.');
+      return;
+    }
+
+    if (!projectName.trim()) {
+      // Usar un nombre por defecto si no hay projectName
+      const defaultName = `${clientName} - ${selectedCategory} - ${new Date().toLocaleDateString()}`;
+      setProjectName(defaultName);
     }
 
     try {
       const projectData = {
-        clientName,
-        projectName,
-        extraInfo,
+        clientName: clientName.trim(),
+        projectName: projectName.trim() || `${clientName} - ${selectedCategory} - ${new Date().toLocaleDateString()}`,
+        extraInfo: extraInfo.trim(),
         branding: selectedCategory === 'Branding' ? result : null,
         web: (selectedCategory === 'Desarrollo Web' || selectedCategory === 'Aplicaciones Web') ? result : null,
         social: selectedCategory === 'Social Media' ? result : null,
         app: null // Por ahora
       };
+
+      console.log('Guardando proyecto:', projectData);
 
       const response = await fetch('/api/save-project', {
         method: 'POST',
@@ -329,29 +344,36 @@ export default function App() {
       }
 
       if (data.success) {
-        alert('Proyecto guardado exitosamente');
+        alert('✅ Proyecto guardado exitosamente en la base de datos');
+        // Recargar el historial después de guardar
+        loadProjects();
       } else {
-        throw new Error(data.error || 'No se pudo guardar el proyecto');
+        throw new Error(data.error || 'Error desconocido al guardar');
       }
     } catch (error: any) {
       console.error('Error saving project:', error);
-      alert('Error al guardar el proyecto: ' + error.message);
+      alert('❌ Error al guardar el proyecto: ' + error.message);
     }
   };
 
   const loadProjects = async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
     try {
       const response = await fetch('/api/get-projects');
       const contentType = response.headers.get('content-type');
       
       if (!contentType || !contentType.includes('application/json')) {
-        console.error('Invalid response type:', contentType);
+        const message = `Tipo de respuesta inválido: ${contentType}`;
+        console.error(message);
+        setHistory([]);
+        setHistoryError(message);
         return;
       }
       
       const data = await response.json();
-      if (data.success && data.projects && data.projects.length > 0) {
-        const firebaseProjects: Project[] = data.projects.map((p: any) => ({
+      if (data.success) {
+        const firebaseProjects: Project[] = Array.isArray(data.projects) ? data.projects.map((p: any) => ({
           id: p.id,
           userId: 'admin',
           clientName: p.clientName,
@@ -363,12 +385,23 @@ export default function App() {
           status: 'completed',
           createdAt: new Date(p.createdAt).getTime(),
           result: p.branding || p.web || p.social || p.app
-        }));
+        })) : [];
+
         setHistory(firebaseProjects);
-        setActiveTab('history');
+        if (firebaseProjects.length > 0) {
+          setActiveTab('history');
+        }
+      } else {
+        console.error('Error loading projects:', data.error);
+        setHistory([]);
+        setHistoryError(data.error || 'No se pudo cargar el historial');
       }
     } catch (error: any) {
       console.error('Error loading projects:', error);
+      setHistory([]);
+      setHistoryError(error.message || 'Error desconocido al cargar el historial');
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -443,7 +476,10 @@ export default function App() {
               Nuevo Proyecto
             </button>
             <button 
-              onClick={() => setActiveTab('history')}
+              onClick={() => {
+                setActiveTab('history');
+                loadProjects();
+              }}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
                 activeTab === 'history' ? "bg-brand-border text-brand-cyan" : "text-brand-muted hover:text-white"
@@ -774,7 +810,17 @@ export default function App() {
               </button>
             </div>
             
-            {history.length === 0 ? (
+            {historyLoading ? (
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-12 text-center">
+                <Loader2 size={48} className="animate-spin text-brand-cyan mx-auto mb-4" />
+                <p className="text-brand-muted">Cargando historial...</p>
+              </div>
+            ) : historyError ? (
+              <div className="bg-brand-card border border-brand-border rounded-2xl p-12 text-center">
+                <History size={48} className="text-brand-border mx-auto mb-4" />
+                <p className="text-brand-muted">{historyError}</p>
+              </div>
+            ) : history.length === 0 ? (
               <div className="bg-brand-card border border-brand-border rounded-2xl p-12 text-center">
                 <History size={48} className="text-brand-border mx-auto mb-4" />
                 <p className="text-brand-muted">No hay proyectos generados todavía.</p>
@@ -1087,61 +1133,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Historial de Proyectos</h2>
-              <button onClick={() => setActiveTab('form')} className="text-brand-cyan text-sm font-bold flex items-center gap-2 hover:underline">
-                <Plus size={16} /> Nuevo Proyecto
-              </button>
-            </div>
-            
-            {history.length === 0 ? (
-              <div className="bg-brand-card border border-brand-border rounded-2xl p-12 text-center">
-                <History size={48} className="text-brand-border mx-auto mb-4" />
-                <p className="text-brand-muted">No hay proyectos generados todavía.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {history.map((proj) => (
-                  <motion.div 
-                    key={proj.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="bg-brand-card border border-brand-border rounded-2xl p-6 hover:border-brand-cyan transition-all group"
-                  >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <h3 className="font-bold text-lg">{proj.projectName}</h3>
-                          <span className="px-2 py-0.5 bg-brand-bg border border-brand-border rounded text-[10px] font-bold text-brand-cyan uppercase">{proj.category}</span>
-                        </div>
-                        <p className="text-brand-muted text-sm">Cliente: <span className="text-white">{proj.clientName}</span> · {new Date(proj.createdAt).toLocaleDateString('es-DO')}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => {
-                            setResult(proj.result);
-                            setClientName(proj.clientName);
-                            setProjectName(proj.projectName);
-                            setSelectedCategory(proj.category);
-                            setActiveTab('form');
-                          }}
-                          className="px-4 py-2 bg-brand-bg border border-brand-border rounded-xl text-xs font-bold hover:border-brand-cyan transition-colors"
-                        >
-                          Ver Detalles
-                        </button>
-                        <button onClick={() => navigator.clipboard.writeText(typeof proj.result === 'string' ? proj.result : JSON.stringify(proj.result))} className="p-2 bg-brand-bg border border-brand-border rounded-xl text-brand-muted hover:text-brand-cyan transition-colors">
-                          <Copy size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        ) : null}
 
         <AnimatePresence>
           {result && (

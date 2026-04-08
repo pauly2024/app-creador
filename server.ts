@@ -566,6 +566,188 @@ Generado por DigiMarket RD - ${new Date().toISOString().split('T')[0]}
     }
   });
 
+  // ZIP download routes
+  app.post("/api/generate-web-zip", async (req, res) => {
+    try {
+      const { clientName, subPackage, extraInfo, result } = req.body;
+      const { features, name } = subPackage;
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${clientName}-web-project.zip"`);
+
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(res);
+
+      // Crear README con especificaciones del proyecto web
+      const readme = `# ${clientName} - Proyecto Web
+Generado por DigiMarket RD - ${new Date().toISOString().split('T')[0]}
+
+## Información del Proyecto
+- **Cliente:** ${clientName}
+- **Paquete:** ${name}
+- **Fecha:** ${new Date().toLocaleDateString()}
+
+## Características Incluidas
+${features.map((f: string) => `- ${f}`).join('\n')}
+
+## Información Adicional
+${extraInfo}
+
+## Estructura del Proyecto Web
+${result}
+
+## Próximos Pasos
+1. Revisar y aprobar las especificaciones
+2. Proporcionar assets (logos, imágenes, contenido)
+3. Desarrollo del sitio web
+4. Testing y optimización
+5. Lanzamiento
+
+---
+Desarrollado por DigiMarket RD
+www.digimarketrd.com
+`;
+
+      archive.append(readme, { name: 'README.md' });
+
+      // Crear archivo de especificaciones técnicas
+      const specs = `# Especificaciones Técnicas - ${clientName}
+
+## Tecnologías Recomendadas
+- HTML5, CSS3, JavaScript
+- Framework: React/Next.js o WordPress
+- Hosting: Recomendado con SSL
+- Dominio: .com o .do preferiblemente
+
+## Funcionalidades del Paquete
+${features.map((f: string) => `- ${f}`).join('\n')}
+
+## Información Adicional del Cliente
+${extraInfo}
+
+## Cronograma Sugerido
+- Semana 1: Diseño y prototipado
+- Semana 2: Desarrollo frontend
+- Semana 3: Desarrollo backend (si aplica)
+- Semana 4: Testing y optimización
+`;
+
+      archive.append(specs, { name: 'especificaciones-tecnicas.md' });
+
+      await archive.finalize();
+
+    } catch (error: any) {
+      console.error("Error generating web ZIP:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/generate-social-zip", async (req, res) => {
+    try {
+      const { clientName, subPackage, extraInfo, result } = req.body;
+      const { features, name } = subPackage;
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${clientName}-social-media.zip"`);
+
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(res);
+
+      // Crear README con estrategia de social media
+      const readme = `# ${clientName} - Estrategia de Social Media
+Generado por DigiMarket RD - ${new Date().toISOString().split('T')[0]}
+
+## Información del Proyecto
+- **Cliente:** ${clientName}
+- **Paquete:** ${name}
+- **Fecha:** ${new Date().toLocaleDateString()}
+
+## Características Incluidas
+${features.map((f: string) => `- ${f}`).join('\n')}
+
+## Información Adicional
+${extraInfo}
+
+## Contenido Generado
+${result}
+
+## Calendario de Publicaciones
+Se incluye el contenido completo para el período del paquete seleccionado.
+
+## Próximos Pasos
+1. Revisar y aprobar el contenido
+2. Proporcionar imágenes adicionales si es necesario
+3. Programar publicaciones en las redes sociales
+4. Monitoreo y ajustes según rendimiento
+5. Reportes mensuales
+
+---
+Desarrollado por DigiMarket RD
+www.digimarketrd.com
+`;
+
+      archive.append(readme, { name: 'README.md' });
+
+      // Crear archivo de calendario de contenido
+      const calendar = `# Calendario de Contenido - ${clientName}
+
+## Estrategia General
+${result?.strategy || 'Estrategia personalizada según las necesidades del cliente'}
+
+## Contenido por Publicación
+${result?.posts ? result.posts.map((post: any, index: number) =>
+  `### Publicación ${index + 1}
+**Texto:** ${post.copy}
+**Hashtags:** ${post.hashtags}
+**Imagen:** ${post.imageUrl ? 'Incluida' : 'Generar según prompt'}
+`).join('\n\n') : 'Contenido detallado en el archivo principal'}
+
+## Recomendaciones de Publicación
+- Publicar consistentemente según el calendario
+- Interactuar con los comentarios
+- Monitorear engagement y ajustar estrategia
+- Usar herramientas de scheduling para automatización
+`;
+
+      archive.append(calendar, { name: 'calendario-contenido.md' });
+
+      // Crear archivo de métricas esperadas
+      const metrics = `# Métricas Esperadas - ${clientName}
+
+## Objetivos del Paquete ${name}
+
+### Alcance Esperado
+- Seguidores objetivo: Según análisis inicial
+- Engagement rate: 3-5% (muy bueno)
+- Growth mensual: 5-15% (dependiendo del nicho)
+
+### KPIs Principales
+- Impresiones por publicación
+- Engagement (likes, comentarios, shares)
+- Crecimiento de seguidores
+- Tráfico al sitio web
+- Conversiones (si aplica)
+
+### Reportes
+- Reporte semanal de rendimiento
+- Análisis mensual detallado
+- Recomendaciones de optimización
+- Ajustes de estrategia según resultados
+
+---
+*Las métricas reales pueden variar según el nicho, calidad del contenido y consistencia de publicación*
+`;
+
+      archive.append(metrics, { name: 'metricas-objetivo.md' });
+
+      await archive.finalize();
+
+    } catch (error: any) {
+      console.error("Error generating social media ZIP:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -87,11 +87,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Crea una tanda de ${numPosts} posts para las redes sociales del cliente: "${clientName}".
       Información adicional: "${extraInfo}".
 
-      IMPORTANTE - GUÍA DE ESTILO:
-      Se ha proporcionado una imagen de referencia.
-      1. Analiza profundamente el estilo visual de esta imagen (colores, iluminación, tipo de fotografía, ambiente, composición).
-      2. El POST #1 DEBE usar obligatoriamente la imagen de referencia proporcionada (referenceImageIndex: 0).
-      3. Para los POSTS #2 al #${numPosts}, debes generar prompts en INGLÉS que describan escenas NUEVAS pero que mantengan EXACTAMENTE el mismo estilo visual, paleta de colores, iluminación, composición y "vibe" de la imagen de referencia. Queremos que TODOS los posts parezcan de la misma sesión de fotos y marca consistente.
+      CRÍTICO - CONSISTENCIA VISUAL PROFESIONAL:
+      Se ha proporcionado una imagen de referencia del cliente.
+      TU PRIORIDAD MÁXIMA es mantener EXACTAMENTE el mismo estilo visual en TODAS las imágenes generadas.
+
+      ANÁLISIS DETALLADO DE LA IMAGEN DE REFERENCIA:
+      1. **Estilo fotográfico:** Analiza si es profesional, lifestyle, producto, retrato, etc.
+      2. **Paleta de colores:** Identifica los colores exactos dominantes y secundarios
+      3. **Iluminación:** Tipo de luz (natural, estudio, cálida, fría, directional)
+      4. **Composición:** Ángulos, encuadres, regla de tercios, elementos presentes
+      5. **Ambiente:** Lugar, contexto, atmósfera, mood general
+      6. **Calidad:** Resolución, nitidez, estilo de edición, filtros aplicados
+
+      REGLAS PARA GENERAR IMÁGENES CONSISTENTES:
+      - El POST #1 DEBE usar SIEMPRE la imagen subida por el cliente (referenceImageIndex: 0)
+      - Los POSTS #2 al #${numPosts} deben generar imágenes NUEVAS pero con:
+        * MISMO ESTILO FOTOGRÁFICO exactamente (si es profesional, mantenerlo)
+        * MISMA PALETA DE COLORES exacta (mismos tonos y saturación)
+        * MISMA ILUMINACIÓN y dirección de luz
+        * MISMA COMPOSICIÓN y estilo de encuadre
+        * MISMA CALIDAD y nivel profesional
+        * MISMO AMBIENTE y atmósfera
+      - Si la referencia es un logo, todas las imágenes deben mantener el branding consistente
+      - Si es un producto, mantener el mismo estilo de presentación y lighting
+      - Si es una persona/equipo, mantener el mismo estilo de retrato y pose
 
       Para cada post debes generar:
       1. El texto (copy) persuasivo con emojis.
