@@ -31,85 +31,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: `Eres el Director de Desarrollo Web de DigiMarket RD.
-Crea la estructura, copy y genera el CÓDIGO FUNCIONAL para la web o web app de: "${clientName}".
+Crea la estructura y copy para la web o web app de: "${clientName}".
 ${packageContext} 
 Información adicional: "${extraInfo}". 
 ${imageContext}
-
-IMPORTANTE: El paquete dicta la complejidad. Si es una Landing Page, genera un index.html con CSS. Si es un E-commerce o App Web, diseña una estructura apropiada generándola en HTML/JS/CSS funcional y estético (UI moderna, premium).
 
 Responde SOLO con JSON siguiendo exactamente esta estructura:
 {
   "sitemap": ["Inicio", "Servicios", "Contacto"],
   "heroCopy": { "title": "Título", "subtitle": "Subtítulo", "cta": "Botón" },
-  "mockupPrompt": "modern website landing page design for [industry], UI/UX, dribbble style",
-  "code": {
-    "index.html": "<!DOCTYPE html>...",
-    "style.css": "body { ... }",
-    "main.js": "..."
-  }
+  "mockupPrompt": "modern website landing page design for [industry], UI/UX, dribbble style"
 }
-Asegúrate de que 'mockupPrompt' incluya detalles del contexto visual y de que en 'code' devuelvas el código HTML, CSS y JS completamente desarrollado y alineado con los requerimientos.` }],
+Asegúrate de que 'mockupPrompt' incluya detalles del contexto visual si se proporcionó y esté en INGLÉS para el motor de generación.` }],
       temperature: 0.7,
       response_format: { type: "json_object" }
     });
 
     const webData = JSON.parse(completion.choices[0].message.content || "{}");
-    const imagePrompt = webData.mockupPrompt + " modern website UI UX design, high quality, dribbble, behance";
-    let mockupImage = "";
-
-    // 1. Replicate
-    if (process.env.REPLICATE_API_TOKEN && !mockupImage) {
-      try {
-        const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-        const output = await replicate.run("black-forest-labs/flux-schnell", {
-          input: { prompt: imagePrompt, aspect_ratio: "16:9" }
-        }) as any[];
-
-        if (output && output[0]) {
-          const reader = output[0].getReader();
-          const chunks: Uint8Array[] = [];
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-          }
-          const buffer = Buffer.concat(chunks);
-          mockupImage = `data:image/png;base64,${buffer.toString('base64')}`;
-        }
-      } catch (e) {
-        console.warn("Replicate failed, trying HuggingFace:", e);
-      }
-    }
-
-    // 2. HuggingFace
-    if (process.env.HUGGINGFACE_API_KEY && !mockupImage) {
-      try {
-        const hfResponse = await fetch(
-          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ inputs: imagePrompt })
-          }
-        );
-        if (hfResponse.ok) {
-          const buffer = Buffer.from(await hfResponse.arrayBuffer());
-          mockupImage = `data:image/jpeg;base64,${buffer.toString('base64')}`;
-        }
-      } catch (e) {
-        console.warn("HuggingFace failed, using Pollinations");
-      }
-    }
-
-    // 3. Pollinations Fallback
-    if (!mockupImage) {
-      const seed = Math.floor(Math.random() * 100000);
-      mockupImage = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?seed=${seed}&width=1280&height=800&nologo=true`;
-    }
+    // Mejorar dramáticamente el prompt de la imagen para que parezca un Mockup Web real y profesional
+    const imagePrompt = `Award winning modern UI UX website landing page design for ${clientName}, ${webData.mockupPrompt}. Desktop view, high resolution, dribbble trending, clear interface, clean typography, hyper-realistic web mockup.`;
+    
+    // Generar únicamente URL (para no sobrecargar el límite de 1MB de la base de datos de Firebase)
+    const seed = Math.floor(Math.random() * 10000000);
+    const mockupImage = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt)}?seed=${seed}&width=1280&height=800&nologo=true`;
 
     res.json({ success: true, data: { ...webData, mockupImage } });
   } catch (error: any) {
